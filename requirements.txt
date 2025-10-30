@@ -1,0 +1,34 @@
+Core Framework
+
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+Database
+
+asyncpg==0.29.0  # Async PostgreSQL driver
+SQLAlchemy==2.0.30
+psycopg2-binary==2.9.9 # Postgres driver for local testing (optional, but useful)
+
+Data Validation & Settings Management
+
+pydantic==2.7.2
+pydantic-settings==2.2.1
+
+Security & Authentication
+
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+CORS middleware
+
+python-multipart==0.0.9
+requests==2.32.3
+requests-toolbelt==1.0.0
+
+AI/LLM Libraries for the Worker
+
+These are necessary for handling Gemini and HuggingFace models
+
+google-genai==0.1.0  # Using the new Google GenAI SDK
+huggingface-hub==0.23.1
+transformers==4.41.2
