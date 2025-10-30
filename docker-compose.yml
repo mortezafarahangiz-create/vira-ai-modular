@@ -1,42 +1,114 @@
-Base image: Use a lightweight Python image for stability
+version: "3.8"
 
-FROM python:3.11-slim
+services:
 
-Set the working directory inside the container
+-----------------------------------------------------------------
 
-WORKDIR /app
+1. Database Service (PostgreSQL)
 
-1. Install dependencies
+سرویس دیتابیس PostgreSQL
 
-We copy the requirements file first to take advantage of Docker's layer caching.
+-----------------------------------------------------------------
 
-If requirements.txt doesn't change, the dependencies won't be reinstalled every time.
+db:
+image: postgres:16-alpine
+container_name: vira_ai_db
+# همیشه در صورت توقف به طور خودکار ری‌استارت شود
+restart: always
+volumes:
+# استفاده از یک Volume دائمی برای ذخیره داده‌ها
+- postgres_data:/var/lib/postgresql/data
+environment:
+# تنظیمات اتصال به دیتابیس (توسط FastAPI/Worker استفاده می‌شود)
+POSTGRES_USER: vira_user
+POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} # خوانده شده از فایل .env
+POSTGRES_DB: vira_ai_db
+healthcheck:
+# بررسی وضعیت سلامت دیتابیس
+test: ["CMD-SHELL", "pg_isready -U vira_user -d vira_ai_db"]
+interval: 5s
+timeout: 5s
+retries: 5
+ports:
+# نمایش پورت برای توسعه محلی/دیباگینگ (اختیاری)
+- "5432:5432"
 
-COPY requirements.txt .
+-----------------------------------------------------------------
 
-Install the Python dependencies
+2. FastAPI Backend Service (API Gateway)
 
-RUN pip install --no-cache-dir -r requirements.txt
+سرویس بک‌اند FastAPI (درگاه API)
 
-2. Copy the entire application code
+-----------------------------------------------------------------
 
-The source code will be copied after the dependencies are installed
+backend:
+build:
+# محل یافتن Dockerfile (که محتوای آن را قبلاً فرستادید)
+context: ./backend
+dockerfile: Dockerfile
+container_name: vira_ai_backend
+restart: always
+depends_on:
+db:
+# منتظر بمان تا دیتابیس آماده و سالم شود
+condition: service_healthy
+ports:
+# پورت اصلی API
+- "8000:8000"
+environment:
+# تنظیمات FastAPI و امنیتی
+FASTAPI_ENV: development
+SECRET_KEY: ${SECRET_KEY}
+ALGORITHM: HS256
+CORS_ORIGINS: ${CORS_ORIGINS}
 
-COPY . .
+  # URL اتصال به دیتابیس (استفاده از نام سرویس 'db' به عنوان هاست)
+  DATABASE_URL: postgresql+asyncpg://vira_user:${POSTGRES_PASSWORD}@db/vira_ai_db
 
-Set environment variables for the application (default to development settings)
+  # تنظیمات AI (برای برقراری ارتباط با سرویس Worker)
+  WORKER_API_URL: http://worker:8001/api/v1/
+  GEMINI_API_KEY: ${GEMINI_API_KEY} # خوانده شده از .env
+  
+# این کامند CMD پیش‌فرض را از Dockerfile استفاده می‌کند (اجرای uvicorn)
+# CMD ["uvicorn", "main:app", ...]
 
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
 
-Expose the port that Uvicorn will listen on
+-----------------------------------------------------------------
 
-EXPOSE 8000
+3. AI Worker Service (Heavy AI Processing)
 
-3. Define the command to run the application
+سرویس ورکر AI (پردازش‌های سنگین AI)
 
-Use the uvicorn entrypoint with recommended production settings (single worker for now)
+-----------------------------------------------------------------
 
-The application entry point is 'main:app' (main.py file, 'app' FastAPI instance)
+worker:
+build:
+# استفاده از همان Dockerfile/کد بک‌اند
+context: ./backend
+dockerfile: Dockerfile
+container_name: vira_ai_worker
+restart: always
+depends_on:
+db:
+condition: service_healthy
+# توجه: این سرویس پورت را به خارج Expose نمی‌کند، اما داخلی روی 8001 گوش می‌دهد.
+# ما CMD پیش‌فرض را بازنویسی می‌کنیم تا به جای uvicorn، اسکریپت ورکر را اجرا کند.
+command: python worker_main.py --host 0.0.0.0 --port 8001
+environment:
+# تنظیمات ورکر
+WORKER_ENV: production
+GEMINI_API_KEY: ${GEMINI_API_KEY} # خوانده شده از .env
+HUGGINGFACE_TOKEN: ${HUGGINGFACE_TOKEN} # خوانده شده از .env
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+-----------------------------------------------------------------
+
+4. Frontend Service (Placeholder)
+
+-----------------------------------------------------------------
+
+در صورت نیاز، سرویس فرانت‌اند در آینده به اینجا اضافه خواهد شد.
+
+تعریف Volume دائمی برای دیتابیس
+
+volumes:
+postgres_data:
