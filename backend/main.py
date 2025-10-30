@@ -1,63 +1,37 @@
-import os
-from typing import List, Optional
+from typing import Annotated
 
-from pydantic import AnyHttpUrl, Field, PostgresDsn, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# ------------------- کلاس تنظیمات (Settings) -------------------
-class Settings(BaseSettings):
+from backend.api.deps import AsyncDB
+from backend.core.security import create_access_token
+
+# Note: منطق احراز هویت (Authentication) و تولید توکن (Token)
+# در گام‌های بعدی و بعد از تعریف شمای Pydantic اضافه خواهد شد.
+
+router = APIRouter()
+
+
+@router.post("/access-token")
+async def login_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: AsyncDB
+):
     """
-    تنظیمات اصلی پروژه که از متغیرهای محیطی (Environment Variables)
-    یا فایل .env خوانده می‌شوند.
+    دریافت توکن دسترسی OAuth2 از طریق نام کاربری و رمز عبور.
     """
+    # TODO: در اینجا باید کاربر با استفاده از email و password تایید شود.
+    # user = authenticate_user(db, email=form_data.username, password=form_data.password)
+    # اگر کاربر پیدا نشد یا رمز عبور اشتباه بود:
+    # raise HTTPException(
+    #     status_code=status.HTTP_401_UNAUTHORIZED,
+    #     detail="Incorrect username or password",
+    #     headers={"WWW-Authenticate": "Bearer"},
+    # )
     
-    # تنظیمات مدل‌سازی Pydantic
-    model_config = SettingsConfigDict(
-        env_file=".env", 
-        extra="ignore",
-        case_sensitive=True
-    )
-
-    # 1. تنظیمات عمومی
-    PROJECT_NAME: str = "FastAPI Base Project"
-    API_V1_STR: str = "/api/v1"
-
-    # 2. تنظیمات امنیت و توکن
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "YOUR_SECURE_SECRET_KEY_GOES_HERE_CHANGE_ME")
-    # زمان انقضای توکن دسترسی (بر حسب دقیقه) - برای مثال 60 دقیقه
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 روز
-
-    # 3. تنظیمات CORS (ارتباط فرانت‌اند و بک‌اند)
-    # اگر فرانت‌اند در دامنه دیگری باشد، آن را اینجا اضافه کنید.
-    # به عنوان مثال: ["http://localhost:3000", "https://yourfrontend.com"]
-    # استفاده از "*" برای محیط توسعه (Development) است.
-    BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = Field(
-        default=["http://localhost:3000", "http://localhost:8000"], 
-        # این مقدار برای پایداری در Pydantic Field تعریف شده است
-        validate_default=True
-    )
-    
-    # 4. تنظیمات دیتابیس PostgreSQL
-    POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "db")
-    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "app_db")
-    
-    # فیلد محاسباتی برای ساخت URI کامل دیتابیس
-    @computed_field
-    @property
-    def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
-        """
-        ساخت URI اتصال به دیتابیس PostgreSQL برای SQLAlchemy
-        """
-        return PostgresDsn.build(
-            scheme="postgresql+asyncpg", # استفاده از درایور asyncpg برای عملیات غیرهمزمان
-            username=self.POSTGRES_USER,
-            password=self.POSTGRES_PASSWORD,
-            host=self.POSTGRES_SERVER,
-            port=5432, # پورت پیش‌فرض PostgreSQL
-            path=f"{self.POSTGRES_DB}",
-        )
-
-
-settings = Settings()
+    # فعلاً یک پاسخ موقت برمی‌گردانیم
+    return {
+        "access_token": "DUMMY_TOKEN_FOR_NOW",
+        "token_type": "bearer",
+    }
