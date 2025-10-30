@@ -1,0 +1,42 @@
+Base image: Use a lightweight Python image for stability
+
+FROM python:3.11-slim
+
+Set the working directory inside the container
+
+WORKDIR /app
+
+1. Install dependencies
+
+We copy the requirements file first to take advantage of Docker's layer caching.
+
+If requirements.txt doesn't change, the dependencies won't be reinstalled every time.
+
+COPY requirements.txt .
+
+Install the Python dependencies
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+2. Copy the entire application code
+
+The source code will be copied after the dependencies are installed
+
+COPY . .
+
+Set environment variables for the application (default to development settings)
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+Expose the port that Uvicorn will listen on
+
+EXPOSE 8000
+
+3. Define the command to run the application
+
+Use the uvicorn entrypoint with recommended production settings (single worker for now)
+
+The application entry point is 'main:app' (main.py file, 'app' FastAPI instance)
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
