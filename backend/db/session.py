@@ -1,29 +1,28 @@
-from typing import Generator
-
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# وارد کردن شیء تنظیمات سراسری که در گام قبل تعریف شد
+from backend.core.config import settings
+
 # ----------------------------------------------------------------------
-# تنظیمات اصلی
+# پیکربندی SQLAlchemy
 # ----------------------------------------------------------------------
 
-# این قسمت باید با توجه به تنظیمات پروژه شما تغییر کند.
-# برای شروع و سادگی، از SQLite در یک فایل به نام 'app.db' استفاده می کنیم.
-# برای پروژه های جدی تر، بهتر است از PostgreSQL یا MySQL استفاده شود.
-SQLALCHEMY_DATABASE_URL = "sqlite:///./app.db"
-
-# Engine اصلی دیتابیس
-# connect_args={'check_same_thread': False} فقط برای SQLite در FastAPI نیاز است.
-# این اجازه می دهد که چندین درخواست در یک زمان با یک اتصال کار کنند.
+# ایجاد موتور اتصال (Engine) به دیتابیس.
+# از رشته اتصال کامل تعریف شده در config.py استفاده می‌شود.
+# echo=False: برای جلوگیری از نمایش کوئری‌های SQL در کنسول. برای دیباگ کردن می‌تواند True شود.
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    settings.SQLALCHEMY_DATABASE_URI, 
+    pool_pre_ping=True,  # بررسی سلامت اتصال قبل از استفاده (برای اتصال‌های پایدار)
+    echo=False
 )
 
-# تعریف SessionLocal
-# این کلاس هر بار که نیاز به تعامل با دیتابیس داریم، یک Session ایجاد می کند.
-# autocommit=False: یعنی تغییرات باید صراحتاً با commit() ذخیره شوند.
-# autoflush=False: از فراخوانی flush به طور خودکار قبل از commit جلوگیری می کند.
-# bind=engine: اتصال به Engine تعریف شده را مشخص می کند.
+# ایجاد سازنده Session (جلسه) برای SQLAlchemy.
+# Session محلی است که کوئری‌ها در آن اجرا می‌شوند.
+# autocommit=False: تغییرات بلافاصله به دیتابیس ارسال نمی‌شوند و نیاز به commit دارند.
+# autoflush=False: تغییرات به صورت خودکار به دیتابیس ارسال نمی‌شوند.
+# bind=engine: این Session را به موتور اتصال ایجاد شده در بالا متصل می‌کند.
 SessionLocal = sessionmaker(
     autocommit=False, 
     autoflush=False, 
@@ -31,18 +30,21 @@ SessionLocal = sessionmaker(
 )
 
 # ----------------------------------------------------------------------
-# تابع Dependency برای استفاده در مسیرهای FastAPI
+# تابع Dependency برای FastAPI
 # ----------------------------------------------------------------------
 
-def get_db() -> Generator:
+def get_db():
     """
-    Dependency Helper برای مسیرهای FastAPI.
-    یک سشن دیتابیس جدید باز می کند و پس از اتمام درخواست آن را می بندد.
+    Dependency Function برای استفاده در مسیرهای (Routes) FastAPI.
+    
+    این تابع یک Session دیتابیس جدید ایجاد کرده، آن را برای استفاده در اختیار 
+    تابع مسیر (Path function) قرار می‌دهد و در نهایت، پس از اتمام کار،
+    (چه موفقیت‌آمیز و چه با خطا) Session را می‌بندد تا منابع آزاد شوند.
+    
+    استفاده از try-finally تضمین می‌کند که Session حتماً بسته شود.
     """
     db = SessionLocal()
     try:
-        # yield باعث می شود که کد بعد از اتمام درخواست (یا وقوع خطا) اجرا شود (فاز cleanup)
         yield db
     finally:
-        # در نهایت، سشن دیتابیس بسته می شود.
         db.close()
