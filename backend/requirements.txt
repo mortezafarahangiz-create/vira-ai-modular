@@ -1,0 +1,29 @@
+Core Web Framework
+
+fastapi
+uvicorn[standard] # uvicorn is the ASGI server
+pydantic # Data validation/settings management
+
+For Utilities and Configuration
+
+python-dotenv # To load environment variables (.env file)
+loguru # Advanced logging utility
+
+AI/ML Dependencies (for future use in modular structure)
+
+We include placeholders for common libraries to ensure easy future integration.
+
+Note: You can uncomment or add specific versions as needed.
+
+transformers
+
+datasets
+
+accelerate
+
+torch
+
+General Utilities
+
+requests
+python-multipart
