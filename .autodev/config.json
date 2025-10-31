@@ -1,0 +1,10 @@
+{
+  "module_name": "placeholder-module",
+  "repo_name": "viraai.io",
+  "deploy_target": "none", 
+  "gcloud_region": "europe-west1",
+  "hf_space_repo": "viraai/placeholder-space", 
+  "env_required": [], 
+  "auto_deploy": true, 
+  "image_name": "placeholder-image" 
+}
