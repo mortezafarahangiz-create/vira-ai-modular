@@ -1,0 +1,112 @@
+# GitHub Workflow for AutoDev deployment
+# This workflow is triggered on every push to the 'main' branch
+# and automatically initiates the deployment script defined in vira-ai.io
+
+name: AutoDev Deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  autodev_deploy:
+    runs-on: ubuntu-latest
+    
+    # Define environment variables needed for the deployment process
+    env:
+      IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }} 
+      PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+    steps:
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v4
+
+      # Setup Google Cloud CLI for authentication and deployment
+      - name: 🔑 Set up Gcloud Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCLOUD_SA_KEY }}
+
+      # Set up Google Cloud SDK
+      - name: ☁️ Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
+
+      # Use Google Cloud CLI to configure Docker credentials
+      - name: 🐳 Configure Docker to use gcloud
+        run: gcloud auth configure-docker --quiet
+
+      # Get the deployment branch name for logging
+      - name: 🏷️ Get Branch Name
+        id: branch_name
+        run: echo "::set-output name=name::$(echo ${{ github.ref }} | sed 's/refs\/heads\///g')"
+
+      # Run the core deployment script
+      - name: 🚀 Run AutoDev Deployment Script
+        run: |
+          # 1. Check if the config file exists
+          if [ ! -f .autodev/config.json ]; then
+            echo ".autodev/config.json not found. Exiting."
+            exit 1
+          fi
+
+          # 2. Extract deployment target from config.json
+          DEPLOY_TARGET=$(jq -r '.deploy_target' .autodev/config.json)
+          echo "Deployment Target: $DEPLOY_TARGET"
+
+          # 3. Handle specific deployment targets
+          if [ "$DEPLOY_TARGET" == "gcloud" ]; then
+            
+            # Retrieve necessary variables for Gcloud
+            MODULE_NAME=$(jq -r '.module_name' .autodev/config.json)
+            GCLOUD_REGION=$(jq -r '.gcloud_region' .autodev/config.json)
+            
+            echo "Building Docker image: $IMAGE_NAME"
+            echo "Deploying to Cloud Run: $MODULE_NAME in $GCLOUD_REGION"
+            
+            # Build and push the Docker image
+            docker build -t gcr.io/$PROJECT_ID/$IMAGE_NAME:$GITHUB_SHA .
+            docker push gcr.io/$PROJECT_ID/$IMAGE_NAME:$GITHUB_SHA
+            
+            # Deploy to Google Cloud Run
+            gcloud run deploy $MODULE_NAME \
+              --image gcr.io/$PROJECT_ID/$IMAGE_NAME:$GITHUB_SHA \
+              --region $GCLOUD_REGION \
+              --project $PROJECT_ID \
+              --platform managed \
+              --allow-unauthenticated \
+              --set-env-vars ENV_FILE_NAME=production.env
+              
+          elif [ "$DEPLOY_TARGET" == "hf_space" ]; then
+
+            # Retrieve necessary variables for Hugging Face
+            REPO_NAME=$(jq -r '.hf_space_repo' .autodev/config.json)
+            
+            echo "Deploying to Hugging Face Space: $REPO_NAME"
+            
+            # Clone the target Space repository
+            git clone https://hf-access-token:$HF_TOKEN@huggingface.co/spaces/$REPO_NAME space_repo
+            
+            # Clear existing content and copy new module files
+            rm -rf space_repo/*
+            cp -r backend/ space_repo/
+            cp -r frontend/ space_repo/
+            
+            # NOTE: For Gradio/Streamlit apps, you might need to copy app.py/etc. 
+            # This example assumes a simple structure copy.
+            
+            # Commit and push changes to the Hugging Face Space
+            cd space_repo
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "AutoDev deployment from $GITHUB_SHA"
+            git push
+
+          else
+            echo "Deployment target '$DEPLOY_TARGET' is set to 'none' or is unsupported. Skipping deployment."
+          fi
